@@ -4,13 +4,13 @@ organization := "net.ground5hark.sbt"
 
 name := "sbt-closure"
 
-version := "0.1.4"
+version := "0.1.4-SNAPSHOT"
 
-scalaVersion := "2.10.4"
+scalaVersion := "2.10.6"
 
-libraryDependencies += "com.google.javascript" % "closure-compiler" % "v20140625"
+libraryDependencies += "com.google.javascript" % "closure-compiler" % "v20160517"
 
-addSbtPlugin("com.typesafe.sbt" %% "sbt-web" % "1.0.2")
+addSbtPlugin("com.typesafe.sbt" %% "sbt-web" % "1.4.0")
 
 resolvers ++= Seq(
   "Typesafe Releases" at "http://repo.typesafe.com/typesafe/releases/",
