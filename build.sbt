@@ -4,8 +4,6 @@ organization := "net.ground5hark.sbt"
 
 name := "sbt-closure"
 
-version := "0.1.4-SNAPSHOT"
-
 scalaVersion := "2.10.6"
 
 libraryDependencies += "com.google.javascript" % "closure-compiler" % "v20160517"
