@@ -18,8 +18,6 @@ resolvers ++= Seq(
   Resolver.mavenLocal
 )
 
-publishMavenStyle := true
-
 scriptedSettings
 
 scriptedLaunchOpts ++= Seq(
