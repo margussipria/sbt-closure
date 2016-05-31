@@ -1,6 +1,6 @@
 sbtPlugin := true
 
-organization := "net.ground5hark.sbt"
+organization := "com.26lights"
 
 name := "sbt-closure"
 
