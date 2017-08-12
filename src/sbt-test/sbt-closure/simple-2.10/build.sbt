@@ -1,14 +1,15 @@
+import com.google.javascript.jscomp.{CompilationLevel, CompilerOptions}
 import com.typesafe.sbt.web.Import._
 import com.typesafe.sbt.web.Import.WebKeys._
 import com.typesafe.sbt.web.pipeline.Pipeline
 
-organization := "net.ground5hark.sbt"
+organization := "eu.sipria.sbt"
 
 name := "sbt-closure-test"
 
 version := "0.1"
 
-scalaVersion := "2.10.4"
+scalaVersion := "2.10.6"
 
 lazy val root = (project in file(".")).enablePlugins(SbtWeb)
 
@@ -38,30 +39,35 @@ wrapPipelineTask := { mappings =>
   }
 }
 
-Closure.flags += "--define='someFlag=true'"
+Closure.extraOptions in closure := {
+  case "js/assets-main.js" => options =>
+    options.setDefineToBooleanLiteral("someFlag", true)
+}
 
-pipelineStages := Seq(wrapPipelineTask, closure)
+pipelineStages := Seq(wrapPipelineTask, closure, digest)
 
 val verifyMinified = taskKey[Unit]("Verify that the minified files are in fact minified")
 
 verifyMinified := {
   var notMinified = false
   var notMinifiedName = ""
-  (((public in Assets).value / Closure.parentDir.value) ** "*.min.js").get.takeWhile(f => !notMinified).foreach { minFile: File =>
+  ((webTarget.value / closure.key.label) ** "*.min.js").get.takeWhile(f => !notMinified).foreach { minFile: File =>
     val minifiedContents = IO.read(minFile)
-    val unminifiedContents = IO.read(minFile.getParentFile / ".." / ".." / "js" / minFile.getName.replace(".min", ""))
+    val unminifiedContents = IO.read(minFile.getParentFile / ".." / ".." / "public/main/js" / minFile.getName.replace(".min", ""))
     notMinifiedName = minFile.getAbsolutePath
-    notMinified = minifiedContents.size >= unminifiedContents.size
+    notMinified = minifiedContents.length >= unminifiedContents.length
   }
-  if (notMinified)
+  if (notMinified) {
     sys.error(s"File was not minified properly: $notMinifiedName")
+  }
 }
 
 val verifyFlags = taskKey[Unit]("Verify that all flags were provided to the compiler")
 
 verifyFlags := {
-  val compiledFile = ((public in Assets).value / Closure.parentDir.value ** "*assets-main.min.js").get.head
+  val compiledFile = ((webTarget.value / closure.key.label) ** "*assets-main.min.js").get.head
   val contents = IO.read(compiledFile)
-  if (!contents.contains("someFlag=!0"))
+  if (!contents.contains("someFlag=!0")) {
     sys.error(s"Expected 'someFlag=!0' but was: '$contents'")
+  }
 }

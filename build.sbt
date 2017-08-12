@@ -1,14 +1,16 @@
 sbtPlugin := true
 
-organization := "com.26lights"
-
 name := "sbt-closure"
+
+organization := "eu.sipria.sbt"
+
+version := "1.0.0-SNAPSHOT"
 
 scalaVersion := "2.10.6"
 
-libraryDependencies += "com.google.javascript" % "closure-compiler" % "v20160517"
+libraryDependencies += "com.google.javascript" % "closure-compiler" % "v20170806"
 
-addSbtPlugin("com.typesafe.sbt" %% "sbt-web" % "1.4.0")
+addSbtPlugin("com.typesafe.sbt" %% "sbt-web" % "1.4.1")
 
 scriptedSettings
 
@@ -17,4 +19,3 @@ scriptedLaunchOpts ++= Seq(
   "-XX:MaxPermSize=512M",
   s"-Dproject.version=${version.value}"
 )
-

@@ -1,10 +1,9 @@
-publishTo in ThisBuild := {
-  val isSnapshot = version.value.contains("-SNAPSHOT")
-  val repo = "http://build.26source.org/nexus/content/repositories/"
-  if (isSnapshot)
-    Some("snapshots" at repo + "public-snapshots")
+publishTo := {
+  val nexus = "https://oss.sonatype.org/"
+  if (isSnapshot.value)
+    Some("snapshots" at nexus + "content/repositories/snapshots")
   else
-    Some("releases"  at repo + "public-releases")
+    Some("releases" at nexus + "service/local/staging/deploy/maven2")
 }
 
-credentials in ThisBuild += Credentials(Path.userHome / ".ivy2" / ".credentials")
+useGpg := true
