@@ -35,6 +35,8 @@ private[closure] object Import {
     val createCompilerOptions: SettingKey[String => CompilerOptions] = {
       settingKey[String => CompilerOptions]("Create compiler options for closure compiler")
     }
+
+    val excludeOriginal: SettingKey[Boolean] = settingKey[Boolean]("Exclude original file from final map")
   }
 }
 
@@ -91,6 +93,9 @@ object SbtClosure extends AutoPlugin {
     },
     includeFilter in closure := new UncompiledJsFileFilter(suffix.value),
     excludeFilter in closure := HiddenFileFilter,
+
+    excludeOriginal := false,
+
     closure := closureCompile.value
   )
 
@@ -107,15 +112,17 @@ object SbtClosure extends AutoPlugin {
     // Only do work on files which have been modified
     val runCompiler = FileFunction.cached(streams.value.cacheDirectory / closure.key.label, FilesInfo.hash) { files =>
       files.map { f =>
-        val outputFileSubPath = IO.split(compileMappings(f))._1 + suffix.value
+        val file = compileMappings(f)
+
+        val outputFileSubPath = IO.split(file)._1 + suffix.value
         val outputFile = targetDir / outputFileSubPath
 
         IO.createDirectory(outputFile.getParentFile)
-        streams.value.log.warn(s"Closure compiler executing on file ${compileMappings(f)}")
+        streams.value.log.warn(s"Closure compiler executing on file $file")
 
         val compiler = new Compiler
 
-        val options = (createCompilerOptions in closure).value(compileMappings(f))
+        val options = (createCompilerOptions in closure).value(file)
 
         val code = SourceFile.fromFile(f.getAbsolutePath)
         val result = compiler.compile(
@@ -127,7 +134,7 @@ object SbtClosure extends AutoPlugin {
         if (result.success) {
           IO.write(outputFile, compiler.toSource, StandardCharsets.UTF_8)
         } else {
-          compiler.getErrorManager.getErrors.map(_.description).foreach(streams.value.log.warn(_))
+          compiler.getErrorManager.getErrors.map(_.description).foreach(streams.value.log.error(_))
         }
 
         outputFile
@@ -141,9 +148,8 @@ object SbtClosure extends AutoPlugin {
       (outputFile, relativePath)
     }.toSeq
 
-    compiled ++ mappings.filter {
-      // Handle duplicate mappings
-      case (mappingFile, mappingName) =>
+    compiled ++ { if ((excludeOriginal in closure).value) mappings.diff(compileMappings.toSeq) else mappings }.filter {
+      case (_, mappingName) =>
         val include = !compiled.exists(_._2 == mappingName)
         if (!include) {
           streams.value.log.warn(

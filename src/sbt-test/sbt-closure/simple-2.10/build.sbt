@@ -39,6 +39,8 @@ wrapPipelineTask := { mappings =>
   }
 }
 
+Closure.excludeOriginal in closure := true
+
 Closure.extraOptions in closure := {
   case "js/assets-main.js" => options =>
     options.setDefineToBooleanLiteral("someFlag", true)
