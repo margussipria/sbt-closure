@@ -22,6 +22,17 @@ private[closure] object Import {
     case object ADVANCED extends CompilationLevel
   }
 
+  final case class ListOfFiles(files: Seq[String] = Nil, paths: PathFinder = PathFinder.empty)
+
+  object ListOfFiles {
+    def apply(paths: PathFinder, files: Seq[String]): ListOfFiles = {
+      ListOfFiles(files, paths)
+    }
+    def apply(paths: PathFinder): ListOfFiles = {
+      ListOfFiles(Nil, paths)
+    }
+  }
+
   object Closure {
     val flags: SettingKey[Seq[String]] = settingKey[Seq[String]]("Command line flags to pass to the closure compiler, example: Seq(\"--formatting=PRETTY_PRINT\", \"--accept_const_keyword\")")
     val suffix: SettingKey[String] = settingKey[String]("Suffix to append to compiled files, default: \".min.js\"")
@@ -36,7 +47,12 @@ private[closure] object Import {
       settingKey[String => CompilerOptions]("Create compiler options for closure compiler")
     }
 
-    val excludeOriginal: SettingKey[Boolean] = settingKey[Boolean]("Exclude original file from final map")
+    val groupFiles: SettingKey[Seq[(String, ListOfFiles)]] = {
+      SettingKey[Seq[(String, ListOfFiles)]]("Compile multiple files to one js file")
+    }
+
+    val excludeOriginal: SettingKey[Boolean] = settingKey[Boolean]("Exclude original file from final pipeline map")
+    val excludeGrouped: SettingKey[Boolean] = settingKey[Boolean]("Exclude grouped files for normal compiling")
   }
 }
 
@@ -94,7 +110,9 @@ object SbtClosure extends AutoPlugin {
     includeFilter in closure := new UncompiledJsFileFilter(suffix.value),
     excludeFilter in closure := HiddenFileFilter,
 
+    groupFiles := Seq.empty,
     excludeOriginal := false,
+    excludeGrouped := false,
 
     closure := closureCompile.value
   )
@@ -109,6 +127,61 @@ object SbtClosure extends AutoPlugin {
       .filterNot(m => exclude.accept(m._1))
       .toMap
 
+    val resolvedGroupFiles = (groupFiles in closure).value.map { case (groupName, listOfFiles) =>
+      val files = {
+        listOfFiles.files.map { file =>
+          mappings.find(_._2 == file).getOrElse {
+            sys.error(s"Unable to find file: $file. Not found.")
+          }
+        } ++ {
+          listOfFiles.paths
+            .pair(relativeTo((sourceDirectories in Assets).value ++ (webModuleDirectories in Assets).value) | flat)
+        }
+      }
+
+      (groupName, files.toMap)
+    }
+
+    val compiledGroupFiles = resolvedGroupFiles.flatMap { case (outputFileSubPath, listOfFiles) =>
+      val outputFile = targetDir / outputFileSubPath
+
+      val compiler = FileFunction.cached(
+        streams.value.cacheDirectory / closure.key.label / outputFileSubPath,
+        FilesInfo.hash
+      ) { files =>
+
+        IO.createDirectory(outputFile.getParentFile)
+        streams.value.log.info(s"Closure compiler executing on file $outputFileSubPath")
+
+        val compiler = new Compiler
+
+        val options = (createCompilerOptions in closure).value(outputFileSubPath)
+
+        import collection.JavaConverters._
+
+        val result = compiler.compile(
+          ImmutableList.of[SourceFile](),
+          files.map(_.getAbsolutePath).map(SourceFile.fromFile).toList.asJava,
+          options
+        )
+
+        if (result.success) {
+          IO.write(outputFile, compiler.toSource, StandardCharsets.UTF_8)
+        } else {
+          compiler.getErrorManager.getErrors.map(_.description).foreach(streams.value.log.error(_))
+        }
+
+        Set(outputFile)
+      }
+
+      compiler(listOfFiles.keySet).map { outputFile =>
+        val relativePath = IO.relativize(targetDir, outputFile).getOrElse {
+          sys.error(s"Cannot find $outputFile path relative to $targetDir")
+        }
+        (outputFile, relativePath)
+      }.toSeq
+    }
+
     // Only do work on files which have been modified
     val runCompiler = FileFunction.cached(streams.value.cacheDirectory / closure.key.label, FilesInfo.hash) { files =>
       files.map { f =>
@@ -118,7 +191,7 @@ object SbtClosure extends AutoPlugin {
         val outputFile = targetDir / outputFileSubPath
 
         IO.createDirectory(outputFile.getParentFile)
-        streams.value.log.warn(s"Closure compiler executing on file $file")
+        streams.value.log.info(s"Closure compiler executing on file $file")
 
         val compiler = new Compiler
 
@@ -141,14 +214,24 @@ object SbtClosure extends AutoPlugin {
       }
     }
 
-    val compiled = runCompiler(compileMappings.keySet).map { outputFile =>
+    val excludeGroupedFiles = if ((excludeGrouped in closure).value) {
+      resolvedGroupFiles.flatMap(_._2.keys).toSet
+    } else Set.empty[File]
+
+    val compiled = runCompiler(compileMappings.keySet.diff(excludeGroupedFiles)).map { outputFile =>
       val relativePath = IO.relativize(targetDir, outputFile).getOrElse {
         sys.error(s"Cannot find $outputFile path relative to $targetDir")
       }
       (outputFile, relativePath)
     }.toSeq
 
-    compiled ++ { if ((excludeOriginal in closure).value) mappings.diff(compileMappings.toSeq) else mappings }.filter {
+    compiled ++ compiledGroupFiles ++ {
+      if ((excludeOriginal in closure).value) {
+        mappings.diff(compileMappings.toSeq).diff(resolvedGroupFiles.flatMap(_._2))
+      } else {
+        mappings
+      }
+    }.filter {
       case (_, mappingName) =>
         val include = !compiled.exists(_._2 == mappingName)
         if (!include) {

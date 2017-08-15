@@ -1,5 +1,4 @@
-import com.google.javascript.jscomp.{CompilationLevel, CompilerOptions}
-import com.typesafe.sbt.web.Import._
+import com.google.javascript.jscomp.CompilerOptions
 import com.typesafe.sbt.web.Import.WebKeys._
 import com.typesafe.sbt.web.pipeline.Pipeline
 
@@ -40,7 +39,7 @@ wrapPipelineTask := { mappings =>
 }
 
 Closure.extraOptions in closure := {
-  case "js/assets-main.js" => options =>
+  case "js/assets-main.js" => options: CompilerOptions =>
     options.setDefineToBooleanLiteral("someFlag", true)
 }
 

@@ -1,0 +1,15 @@
+> webStage
+$ exists target/web/closure/js/test1.js
+$ exists target/web/closure/js/test2.js
+$ exists target/web/closure/js/exclude.min.js
+$ exists target/web/stage/js/test1.js
+$ exists target/web/stage/js/test2.js
+$ exists target/web/stage/js/exclude.min.js
+$ absent target/web/stage/js/assets-main.js
+$ absent target/web/stage/js/hello.js
+$ absent target/web/stage/js/assets-main.min.js
+$ absent target/web/stage/js/hello.min.js
+
+# Uses command line flags
+> verifyFlags
+> clean
