@@ -1,0 +1,20 @@
+> webStage
+$ exists target/web/closure/js/assets-main.min.js
+$ exists target/web/closure/js/hello.min.js
+$ exists target/web/closure/js/wrap.min.js
+$ exists target/web/closure/js/wrap.wrapped.min.js
+$ exists target/web/stage/js/assets-main.min.js
+$ exists target/web/stage/js/hello.min.js
+$ exists target/web/stage/js/wrap.min.js
+$ exists target/web/stage/js/wrap.wrapped.min.js
+$ exists target/web/stage/js/assets-main.js
+$ exists target/web/stage/js/hello.js
+$ exists target/web/stage/js/wrap.js
+$ exists target/web/stage/js/wrap.wrapped.js
+
+# Verify contents
+> verifyMinified
+
+# Uses command line flags
+> verifyFlags
+> clean

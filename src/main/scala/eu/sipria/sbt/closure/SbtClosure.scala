@@ -12,7 +12,7 @@ import sbt._
 
 import scala.collection.mutable.ListBuffer
 
-private[closure] object Import {
+private[closure] trait ClosureKeys {
   val closure: TaskKey[Stage] = taskKey[Stage]("Runs JavaScript web assets through the Google closure compiler")
 
   sealed trait CompilationLevel
@@ -33,27 +33,25 @@ private[closure] object Import {
     }
   }
 
-  object Closure {
-    val flags: SettingKey[Seq[String]] = settingKey[Seq[String]]("Command line flags to pass to the closure compiler, example: Seq(\"--formatting=PRETTY_PRINT\", \"--accept_const_keyword\")")
-    val suffix: SettingKey[String] = settingKey[String]("Suffix to append to compiled files, default: \".min.js\"")
-    val compilationLevel: SettingKey[CompilationLevel] = settingKey[CompilationLevel]("Compilation level of closure")
-    val defaultOptions: SettingKey[PartialFunction[String, (CompilerOptions => Unit)]] = {
-      settingKey[PartialFunction[String, (CompilerOptions => Unit)]]("Default options for closure compiler")
-    }
-    val extraOptions: SettingKey[PartialFunction[String, (CompilerOptions => Unit)]] = {
-      settingKey[PartialFunction[String, (CompilerOptions => Unit)]]("Extra options for closure compiler")
-    }
-    val createCompilerOptions: SettingKey[String => CompilerOptions] = {
-      settingKey[String => CompilerOptions]("Create compiler options for closure compiler")
-    }
-
-    val groupFiles: SettingKey[Seq[(String, ListOfFiles)]] = {
-      SettingKey[Seq[(String, ListOfFiles)]]("Compile multiple files to one js file")
-    }
-
-    val excludeOriginal: SettingKey[Boolean] = settingKey[Boolean]("Exclude original file from final pipeline map")
-    val excludeGrouped: SettingKey[Boolean] = settingKey[Boolean]("Exclude grouped files for normal compiling")
+  val closureFlags: SettingKey[Seq[String]] = settingKey[Seq[String]]("Command line flags to pass to the closure compiler, example: Seq(\"--formatting=PRETTY_PRINT\", \"--accept_const_keyword\")")
+  val closureSuffix: SettingKey[String] = settingKey[String]("Suffix to append to compiled files, default: \".min.js\"")
+  val closureCompilationLevel: SettingKey[CompilationLevel] = settingKey[CompilationLevel]("Compilation level of closure")
+  val closureDefaultOptions: SettingKey[PartialFunction[String, (CompilerOptions => Unit)]] = {
+    settingKey[PartialFunction[String, (CompilerOptions => Unit)]]("Default options for closure compiler")
   }
+  val closureExtraOptions: SettingKey[PartialFunction[String, (CompilerOptions => Unit)]] = {
+    settingKey[PartialFunction[String, (CompilerOptions => Unit)]]("Extra options for closure compiler")
+  }
+  val closureCreateCompilerOptions: SettingKey[String => CompilerOptions] = {
+    settingKey[String => CompilerOptions]("Create compiler options for closure compiler")
+  }
+
+  val closureGroupFiles: SettingKey[Seq[(String, ListOfFiles)]] = {
+    settingKey[Seq[(String, ListOfFiles)]]("Compile multiple files to one js file")
+  }
+
+  val closureExcludeOriginal: SettingKey[Boolean] = settingKey[Boolean]("Exclude original file from final pipeline map")
+  val closureExcludeGrouped: SettingKey[Boolean] = settingKey[Boolean]("Exclude grouped files for normal compiling")
 }
 
 class UncompiledJsFileFilter(suffix: String) extends FileFilter {
@@ -72,27 +70,26 @@ object SbtClosure extends AutoPlugin {
 
   override def trigger = AllRequirements
 
-  val autoImport: Import.type = Import
+  object autoImport extends ClosureKeys
 
   import SbtWeb.autoImport._
   import WebKeys._
   import autoImport._
-  import Closure._
 
   override def projectSettings: Seq[Setting[_]] = Seq(
-    flags := ListBuffer.empty[String],
-    suffix := ".min.js",
-    compilationLevel := CompilationLevel.SIMPLE,
-    defaultOptions in closure := PartialFunction.empty,
-    extraOptions in closure := PartialFunction.empty,
-    createCompilerOptions in closure := { file: String =>
+    closureFlags := ListBuffer.empty[String],
+    closureSuffix := ".min.js",
+    closureCompilationLevel := CompilationLevel.SIMPLE,
+    closureDefaultOptions := PartialFunction.empty,
+    closureExtraOptions := PartialFunction.empty,
+    closureCreateCompilerOptions := { file: String =>
       val options = new CompilerOptions()
 
-      (defaultOptions in closure).value.applyOrElse(file, { _: String => options: CompilerOptions =>
+      closureDefaultOptions.value.applyOrElse(file, { _: String => options: CompilerOptions =>
         import com.google.javascript.jscomp.{CompilationLevel => ClosureCompilationLevel}
 
         {
-          compilationLevel.value match {
+          closureCompilationLevel.value match {
             case CompilationLevel.WHITESPACE  => ClosureCompilationLevel.WHITESPACE_ONLY
             case CompilationLevel.SIMPLE      => ClosureCompilationLevel.SIMPLE_OPTIMIZATIONS
             case CompilationLevel.ADVANCED    => ClosureCompilationLevel.ADVANCED_OPTIMIZATIONS
@@ -100,19 +97,19 @@ object SbtClosure extends AutoPlugin {
         }.setOptionsForCompilationLevel(options)
       })(options)
 
-      val myExtraOptions = (extraOptions in closure).value
+      val myExtraOptions = closureExtraOptions.value
       if (myExtraOptions.isDefinedAt(file)) {
         myExtraOptions.apply(file)(options)
       }
 
       options
     },
-    includeFilter in closure := new UncompiledJsFileFilter(suffix.value),
-    excludeFilter in closure := HiddenFileFilter,
+    includeFilter := new UncompiledJsFileFilter(closureSuffix.value),
+    excludeFilter := HiddenFileFilter,
 
-    groupFiles := Seq.empty,
-    excludeOriginal := false,
-    excludeGrouped := false,
+    closureGroupFiles := Seq.empty,
+    closureExcludeOriginal := false,
+    closureExcludeGrouped := false,
 
     closure := closureCompile.value
   )
@@ -132,7 +129,7 @@ object SbtClosure extends AutoPlugin {
         .filterNot(m => exclude.accept(m._1))
         .toMap
 
-      val resolvedGroupFiles = (groupFiles in closure).value.map { case (groupName, listOfFiles) =>
+      val resolvedGroupFiles = closureGroupFiles.value.map { case (groupName, listOfFiles) =>
         val files = {
           listOfFiles.files.map { file =>
             mappings.find(_._2 == file).getOrElse {
@@ -160,7 +157,7 @@ object SbtClosure extends AutoPlugin {
 
           val compiler = new Compiler
 
-          val options = (createCompilerOptions in closure).value(outputFileSubPath)
+          val options = closureCreateCompilerOptions.value(outputFileSubPath)
 
           import collection.JavaConverters._
 
@@ -192,7 +189,7 @@ object SbtClosure extends AutoPlugin {
         files.map { f =>
           val file = compileMappings(f)
 
-          val outputFileSubPath = IO.split(file)._1 + suffix.value
+          val outputFileSubPath = IO.split(file)._1 + closureSuffix.value
           val outputFile = targetDir / outputFileSubPath
 
           IO.createDirectory(outputFile.getParentFile)
@@ -200,7 +197,7 @@ object SbtClosure extends AutoPlugin {
 
           val compiler = new Compiler
 
-          val options = (createCompilerOptions in closure).value(file)
+          val options = closureCreateCompilerOptions.value(file)
 
           val code = SourceFile.fromFile(f.getAbsolutePath)
           val result = compiler.compile(
@@ -219,7 +216,7 @@ object SbtClosure extends AutoPlugin {
         }
       }
 
-      val excludeGroupedFiles = if ((excludeGrouped in closure).value) {
+      val excludeGroupedFiles = if (closureExcludeGrouped.value) {
         resolvedGroupFiles.flatMap(_._2.keys).toSet
       } else Set.empty[File]
 
@@ -231,7 +228,7 @@ object SbtClosure extends AutoPlugin {
       }.toSeq
 
       compiled ++ compiledGroupFiles ++ {
-        if ((excludeOriginal in closure).value) {
+        if (closureExcludeOriginal.value) {
           mappings.diff(compileMappings.toSeq).diff(resolvedGroupFiles.flatMap(_._2))
         } else {
           mappings

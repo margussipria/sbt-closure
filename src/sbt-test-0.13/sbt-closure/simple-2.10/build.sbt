@@ -8,7 +8,7 @@ name := "sbt-closure-test"
 
 version := "0.1"
 
-scalaVersion := "2.11.8"
+scalaVersion := "2.10.6"
 
 lazy val root = (project in file(".")).enablePlugins(SbtWeb)
 
@@ -38,7 +38,9 @@ wrapPipelineTask := { mappings =>
   }
 }
 
-Closure.extraOptions in closure := {
+closureExcludeOriginal := true
+
+closureExtraOptions := {
   case "js/assets-main.js" => options: CompilerOptions =>
     options.setDefineToBooleanLiteral("someFlag", true)
 }

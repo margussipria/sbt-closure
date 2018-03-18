@@ -17,6 +17,12 @@ libraryDependencies += "com.google.javascript" % "closure-compiler" % "v20180204
 
 addSbtPlugin("com.typesafe.sbt" %% "sbt-web" % "1.4.3")
 
+sbtTestDirectory := {
+  import sbt.librarymanagement.CrossVersion.binarySbtVersion
+  val version = (sbtVersion in pluginCrossBuild).value
+  sourceDirectory.value / ("sbt-test-%s" format binarySbtVersion(version))
+}
+
 scriptedLaunchOpts ++= Seq(
   "-Xmx2048M",
   "-XX:MaxPermSize=512M",

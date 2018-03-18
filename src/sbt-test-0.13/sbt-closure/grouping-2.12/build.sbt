@@ -11,16 +11,16 @@ scalaVersion := "2.12.3"
 
 lazy val root = (project in file(".")).enablePlugins(SbtWeb)
 
-Closure.groupFiles in closure := Seq(
+closureGroupFiles := Seq(
   "js/test1.js" -> ListOfFiles(Seq("js/hello.js", "js/assets-main.js")),
   "js/test2.js" -> ListOfFiles((((sourceDirectory in Assets).value / "js") * "*.js") --- (((sourceDirectory in Assets).value / "js") * "exclude.js"))
 )
 
-Closure.excludeOriginal in closure := true
+closureExcludeOriginal := true
 
-Closure.excludeGrouped in closure := true
+closureExcludeGrouped := true
 
-Closure.extraOptions in closure := {
+closureExtraOptions := {
   case "js/test1.js" | "js/test2.js" => options: CompilerOptions =>
     options.setDefineToBooleanLiteral("someFlag", true)
 }
