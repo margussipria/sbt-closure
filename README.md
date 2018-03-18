@@ -6,9 +6,9 @@ sbt-closure
 
 Plugin
 ======
-Add the plugin to your `project/plugins.sbt`:
+Add the plugin to your `project/plugins.sbt` (for sbt 0.13.5+ and 1.x):
 ```scala
-addSbtPlugin("eu.sipria.sbt" % "sbt-closure" % "1.0.0")
+addSbtPlugin("eu.sipria.sbt" % "sbt-closure" % "1.1.0")
 ```
 
 Add the [Sonatype releases] resolver:
