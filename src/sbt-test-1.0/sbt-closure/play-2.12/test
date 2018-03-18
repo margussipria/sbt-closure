@@ -1,0 +1,7 @@
+> webStage
+$ exists target/web/stage/public/javascripts/main.js
+$ exists target/web/stage/public/javascripts/assets-main.min.js
+$ exists target/web/stage/public/javascripts/hello.min.js
+$ exists target/web/closure/javascripts/assets-main.min.js
+$ exists target/web/closure/javascripts/hello.min.js
+$ exists target/web/closure/javascripts/main.min.js
