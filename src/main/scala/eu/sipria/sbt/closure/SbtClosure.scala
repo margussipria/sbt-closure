@@ -68,18 +68,18 @@ class UncompiledJsFileFilter(suffix: String) extends FileFilter {
 }
 
 object SbtClosure extends AutoPlugin {
-  override def requires = SbtWeb
+  override def requires: Plugins = SbtWeb
 
   override def trigger = AllRequirements
 
-  val autoImport = Import
+  val autoImport: Import.type = Import
 
   import SbtWeb.autoImport._
   import WebKeys._
   import autoImport._
   import Closure._
 
-  override def projectSettings = Seq(
+  override def projectSettings: Seq[Setting[_]] = Seq(
     flags := ListBuffer.empty[String],
     suffix := ".min.js",
     compilationLevel := CompilationLevel.SIMPLE,
@@ -117,131 +117,137 @@ object SbtClosure extends AutoPlugin {
     closure := closureCompile.value
   )
 
-  private def closureCompile: Def.Initialize[Task[Pipeline.Stage]] = Def.task { mappings: Seq[PathMapping] =>
-    val include = (includeFilter in closure).value
-    val exclude = (excludeFilter in closure).value
+  private def closureCompile: Def.Initialize[Task[Pipeline.Stage]] = Def.taskDyn {
 
-    val targetDir = webTarget.value / closure.key.label
-    val compileMappings = mappings.view
-      .filter(m => include.accept(m._1))
-      .filterNot(m => exclude.accept(m._1))
-      .toMap
+    val taskStreams: TaskStreams = streams.value
 
-    val resolvedGroupFiles = (groupFiles in closure).value.map { case (groupName, listOfFiles) =>
-      val files = {
-        listOfFiles.files.map { file =>
-          mappings.find(_._2 == file).getOrElse {
-            sys.error(s"Unable to find file: $file. Not found.")
+    Def.task { mappings: Seq[PathMapping] =>
+
+      val include = (includeFilter in closure).value
+      val exclude = (excludeFilter in closure).value
+
+      val targetDir = webTarget.value / closure.key.label
+      val compileMappings = mappings.view
+        .filter(m => include.accept(m._1))
+        .filterNot(m => exclude.accept(m._1))
+        .toMap
+
+      val resolvedGroupFiles = (groupFiles in closure).value.map { case (groupName, listOfFiles) =>
+        val files = {
+          listOfFiles.files.map { file =>
+            mappings.find(_._2 == file).getOrElse {
+              sys.error(s"Unable to find file: $file. Not found.")
+            }
+          } ++ {
+            listOfFiles.paths
+              .pair(Path.relativeTo((sourceDirectories in Assets).value ++ (webModuleDirectories in Assets).value) | Path.flat)
           }
-        } ++ {
-          listOfFiles.paths
-            .pair(relativeTo((sourceDirectories in Assets).value ++ (webModuleDirectories in Assets).value) | flat)
+        }
+
+        (groupName, files.toMap)
+      }
+
+      val compiledGroupFiles = resolvedGroupFiles.flatMap { case (outputFileSubPath, listOfFiles) =>
+        val outputFile = targetDir / outputFileSubPath
+
+        val compiler = FileFunction.cached(
+          taskStreams.cacheDirectory / closure.key.label / outputFileSubPath,
+          FilesInfo.hash
+        ) { files =>
+
+          IO.createDirectory(outputFile.getParentFile)
+          taskStreams.log.info(s"Closure compiler executing on file $outputFileSubPath")
+
+          val compiler = new Compiler
+
+          val options = (createCompilerOptions in closure).value(outputFileSubPath)
+
+          import collection.JavaConverters._
+
+          val result = compiler.compile(
+            ImmutableList.of[SourceFile](),
+            files.map(_.getAbsolutePath).map(SourceFile.fromFile).toList.asJava,
+            options
+          )
+
+          if (result.success) {
+            IO.write(outputFile, compiler.toSource, StandardCharsets.UTF_8)
+          } else {
+            compiler.getErrorManager.getErrors.map(_.description).foreach(taskStreams.log.error(_))
+          }
+
+          Set(outputFile)
+        }
+
+        compiler(listOfFiles.keySet).map { outputFile =>
+          val relativePath = IO.relativize(targetDir, outputFile).getOrElse {
+            sys.error(s"Cannot find $outputFile path relative to $targetDir")
+          }
+          (outputFile, relativePath)
+        }.toSeq
+      }
+
+      // Only do work on files which have been modified
+      val runCompiler = FileFunction.cached(taskStreams.cacheDirectory / closure.key.label, FilesInfo.hash) { files =>
+        files.map { f =>
+          val file = compileMappings(f)
+
+          val outputFileSubPath = IO.split(file)._1 + suffix.value
+          val outputFile = targetDir / outputFileSubPath
+
+          IO.createDirectory(outputFile.getParentFile)
+          taskStreams.log.info(s"Closure compiler executing on file $file")
+
+          val compiler = new Compiler
+
+          val options = (createCompilerOptions in closure).value(file)
+
+          val code = SourceFile.fromFile(f.getAbsolutePath)
+          val result = compiler.compile(
+            ImmutableList.of[SourceFile](),
+            ImmutableList.of[SourceFile](code),
+            options
+          )
+
+          if (result.success) {
+            IO.write(outputFile, compiler.toSource, StandardCharsets.UTF_8)
+          } else {
+            compiler.getErrorManager.getErrors.map(_.description).foreach(taskStreams.log.error(_))
+          }
+
+          outputFile
         }
       }
 
-      (groupName, files.toMap)
-    }
+      val excludeGroupedFiles = if ((excludeGrouped in closure).value) {
+        resolvedGroupFiles.flatMap(_._2.keys).toSet
+      } else Set.empty[File]
 
-    val compiledGroupFiles = resolvedGroupFiles.flatMap { case (outputFileSubPath, listOfFiles) =>
-      val outputFile = targetDir / outputFileSubPath
-
-      val compiler = FileFunction.cached(
-        streams.value.cacheDirectory / closure.key.label / outputFileSubPath,
-        FilesInfo.hash
-      ) { files =>
-
-        IO.createDirectory(outputFile.getParentFile)
-        streams.value.log.info(s"Closure compiler executing on file $outputFileSubPath")
-
-        val compiler = new Compiler
-
-        val options = (createCompilerOptions in closure).value(outputFileSubPath)
-
-        import collection.JavaConverters._
-
-        val result = compiler.compile(
-          ImmutableList.of[SourceFile](),
-          files.map(_.getAbsolutePath).map(SourceFile.fromFile).toList.asJava,
-          options
-        )
-
-        if (result.success) {
-          IO.write(outputFile, compiler.toSource, StandardCharsets.UTF_8)
-        } else {
-          compiler.getErrorManager.getErrors.map(_.description).foreach(streams.value.log.error(_))
-        }
-
-        Set(outputFile)
-      }
-
-      compiler(listOfFiles.keySet).map { outputFile =>
+      val compiled = runCompiler(compileMappings.keySet.diff(excludeGroupedFiles)).map { outputFile =>
         val relativePath = IO.relativize(targetDir, outputFile).getOrElse {
           sys.error(s"Cannot find $outputFile path relative to $targetDir")
         }
         (outputFile, relativePath)
       }.toSeq
-    }
 
-    // Only do work on files which have been modified
-    val runCompiler = FileFunction.cached(streams.value.cacheDirectory / closure.key.label, FilesInfo.hash) { files =>
-      files.map { f =>
-        val file = compileMappings(f)
-
-        val outputFileSubPath = IO.split(file)._1 + suffix.value
-        val outputFile = targetDir / outputFileSubPath
-
-        IO.createDirectory(outputFile.getParentFile)
-        streams.value.log.info(s"Closure compiler executing on file $file")
-
-        val compiler = new Compiler
-
-        val options = (createCompilerOptions in closure).value(file)
-
-        val code = SourceFile.fromFile(f.getAbsolutePath)
-        val result = compiler.compile(
-          ImmutableList.of[SourceFile](),
-          ImmutableList.of[SourceFile](code),
-          options
-        )
-
-        if (result.success) {
-          IO.write(outputFile, compiler.toSource, StandardCharsets.UTF_8)
+      compiled ++ compiledGroupFiles ++ {
+        if ((excludeOriginal in closure).value) {
+          mappings.diff(compileMappings.toSeq).diff(resolvedGroupFiles.flatMap(_._2))
         } else {
-          compiler.getErrorManager.getErrors.map(_.description).foreach(streams.value.log.error(_))
+          mappings
         }
-
-        outputFile
+      }.filter {
+        case (_, mappingName) =>
+          val include = !compiled.exists(_._2 == mappingName)
+          if (!include) {
+            taskStreams.log.warn(
+              s"Closure compiler encountered a duplicate mapping for $mappingName and will " +
+                "prefer the closure compiled version instead. If you want to avoid this, make sure you aren't " +
+                "including minified and non-minified sibling assets in the pipeline."
+            )
+          }
+          include
       }
-    }
-
-    val excludeGroupedFiles = if ((excludeGrouped in closure).value) {
-      resolvedGroupFiles.flatMap(_._2.keys).toSet
-    } else Set.empty[File]
-
-    val compiled = runCompiler(compileMappings.keySet.diff(excludeGroupedFiles)).map { outputFile =>
-      val relativePath = IO.relativize(targetDir, outputFile).getOrElse {
-        sys.error(s"Cannot find $outputFile path relative to $targetDir")
-      }
-      (outputFile, relativePath)
-    }.toSeq
-
-    compiled ++ compiledGroupFiles ++ {
-      if ((excludeOriginal in closure).value) {
-        mappings.diff(compileMappings.toSeq).diff(resolvedGroupFiles.flatMap(_._2))
-      } else {
-        mappings
-      }
-    }.filter {
-      case (_, mappingName) =>
-        val include = !compiled.exists(_._2 == mappingName)
-        if (!include) {
-          streams.value.log.warn(
-            s"Closure compiler encountered a duplicate mapping for $mappingName and will " +
-              "prefer the closure compiled version instead. If you want to avoid this, make sure you aren't " +
-              "including minified and non-minified sibling assets in the pipeline."
-          )
-        }
-        include
     }
   }
 }

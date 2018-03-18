@@ -7,15 +7,15 @@ licenses := Seq("MIT" -> url("http://opensource.org/licenses/MIT"))
 
 organization := "eu.sipria.sbt"
 
-version := "1.0.0"
+version := "1.1.0-SNAPSHOT"
 
-scalaVersion := "2.10.6"
+scalaVersion := "2.12.4"
 
-libraryDependencies += "com.google.javascript" % "closure-compiler" % "v20170806"
+crossSbtVersions := Seq("0.13.17", "1.1.1")
 
-addSbtPlugin("com.typesafe.sbt" %% "sbt-web" % "1.4.1")
+libraryDependencies += "com.google.javascript" % "closure-compiler" % "v20180204"
 
-scriptedSettings
+addSbtPlugin("com.typesafe.sbt" %% "sbt-web" % "1.4.3")
 
 scriptedLaunchOpts ++= Seq(
   "-Xmx2048M",
