@@ -7,11 +7,11 @@ licenses := Seq("MIT" -> url("http://opensource.org/licenses/MIT"))
 
 organization := "eu.sipria.sbt"
 
-version := "1.1.0"
+version := "1.1.1"
 
 scalaVersion := "2.12.4"
 
-crossSbtVersions := Seq("0.13.17", "1.1.1")
+crossSbtVersions := Seq("0.13.17", "1.1.2")
 
 libraryDependencies += "com.google.javascript" % "closure-compiler" % "v20180204"
 

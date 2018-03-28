@@ -104,8 +104,8 @@ object SbtClosure extends AutoPlugin {
 
       options
     },
-    includeFilter := new UncompiledJsFileFilter(closureSuffix.value),
-    excludeFilter := HiddenFileFilter,
+    includeFilter in closure := new UncompiledJsFileFilter(closureSuffix.value),
+    excludeFilter in closure := HiddenFileFilter,
 
     closureGroupFiles := Seq.empty,
     closureExcludeOriginal := false,
