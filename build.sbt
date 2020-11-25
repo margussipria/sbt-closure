@@ -7,7 +7,7 @@ licenses := Seq("MIT" -> url("http://opensource.org/licenses/MIT"))
 
 organization := "eu.sipria.sbt"
 
-version := "1.1.2-SNAPSHOT"
+version := "1.4.0"
 
 scalaVersion := "2.12.12"
 
