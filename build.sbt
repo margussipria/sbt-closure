@@ -7,15 +7,17 @@ licenses := Seq("MIT" -> url("http://opensource.org/licenses/MIT"))
 
 organization := "eu.sipria.sbt"
 
-version := "1.1.1"
+version := "1.1.2-SNAPSHOT"
 
-scalaVersion := "2.12.4"
+scalaVersion := "2.12.12"
 
-crossSbtVersions := Seq("0.13.17", "1.1.2")
+crossSbtVersions := Seq("1.4.4")
 
-libraryDependencies += "com.google.javascript" % "closure-compiler" % "v20180204"
+enablePlugins(ScriptedPlugin)
 
-addSbtPlugin("com.typesafe.sbt" %% "sbt-web" % "1.4.3")
+libraryDependencies += "com.google.javascript" % "closure-compiler" % "v20201102"
+
+addSbtPlugin("com.typesafe.sbt" %% "sbt-web" % "1.4.4")
 
 sbtTestDirectory := {
   import sbt.librarymanagement.CrossVersion.binarySbtVersion

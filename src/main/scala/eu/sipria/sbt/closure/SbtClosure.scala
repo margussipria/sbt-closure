@@ -2,13 +2,13 @@ package eu.sipria.sbt.closure
 
 import java.nio.charset.StandardCharsets
 
-import com.google.common.collect.ImmutableList
 import com.google.javascript.jscomp.{Compiler, CompilerOptions, SourceFile}
 import com.typesafe.sbt.web.pipeline.Pipeline
 import com.typesafe.sbt.web.pipeline.Pipeline.Stage
 import com.typesafe.sbt.web.{PathMapping, SbtWeb}
 import sbt.Keys._
 import sbt._
+import scala.collection.JavaConverters._
 
 import scala.collection.mutable.ListBuffer
 
@@ -159,10 +159,8 @@ object SbtClosure extends AutoPlugin {
 
           val options = closureCreateCompilerOptions.value(outputFileSubPath)
 
-          import collection.JavaConverters._
-
           val result = compiler.compile(
-            ImmutableList.of[SourceFile](),
+            java.util.Collections.emptyList[SourceFile](),
             files.map(_.getAbsolutePath).map(SourceFile.fromFile).toList.asJava,
             options
           )
@@ -170,7 +168,8 @@ object SbtClosure extends AutoPlugin {
           if (result.success) {
             IO.write(outputFile, compiler.toSource, StandardCharsets.UTF_8)
           } else {
-            compiler.getErrorManager.getErrors.map(_.description).foreach(taskStreams.log.error(_))
+            compiler.getErrorManager.getErrors.asScala.map(_.getDescription).foreach(taskStreams.log.error(_))
+            compiler.getErrorManager.getWarnings.asScala.map(_.getDescription).foreach(taskStreams.log.warn(_))
           }
 
           Set(outputFile)
@@ -201,15 +200,16 @@ object SbtClosure extends AutoPlugin {
 
           val code = SourceFile.fromFile(f.getAbsolutePath)
           val result = compiler.compile(
-            ImmutableList.of[SourceFile](),
-            ImmutableList.of[SourceFile](code),
+            java.util.Collections.emptyList[SourceFile](),
+            java.util.Collections.singletonList[SourceFile](code),
             options
           )
 
           if (result.success) {
             IO.write(outputFile, compiler.toSource, StandardCharsets.UTF_8)
           } else {
-            compiler.getErrorManager.getErrors.map(_.description).foreach(taskStreams.log.error(_))
+            compiler.getErrorManager.getErrors.asScala.map(_.getDescription).foreach(taskStreams.log.error(_))
+            compiler.getErrorManager.getWarnings.asScala.map(_.getDescription).foreach(taskStreams.log.warn(_))
           }
 
           outputFile
