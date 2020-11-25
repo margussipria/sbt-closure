@@ -38,7 +38,7 @@ wrapPipelineTask := { mappings =>
   }
 }
 
-closureExtraOptions := {
+(closureExtraOptions in (Assets, closure)) := {
   case "js/assets-main.js" => options: CompilerOptions =>
     options.setDefineToBooleanLiteral("someFlag", true)
 }

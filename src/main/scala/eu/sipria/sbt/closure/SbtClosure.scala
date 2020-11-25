@@ -8,8 +8,8 @@ import com.typesafe.sbt.web.pipeline.Pipeline.Stage
 import com.typesafe.sbt.web.{PathMapping, SbtWeb}
 import sbt.Keys._
 import sbt._
-import scala.collection.JavaConverters._
 
+import scala.collection.JavaConverters._
 import scala.collection.mutable.ListBuffer
 
 private[closure] trait ClosureKeys {
@@ -76,7 +76,7 @@ object SbtClosure extends AutoPlugin {
   import WebKeys._
   import autoImport._
 
-  override def projectSettings: Seq[Setting[_]] = Seq(
+  val closureUnscopedSettings = Seq(
     closureFlags := ListBuffer.empty[String],
     closureSuffix := ".min.js",
     closureCompilationLevel := CompilationLevel.SIMPLE,
@@ -104,40 +104,48 @@ object SbtClosure extends AutoPlugin {
 
       options
     },
-    includeFilter in closure := new UncompiledJsFileFilter(closureSuffix.value),
-    excludeFilter in closure := HiddenFileFilter,
+    includeFilter := new UncompiledJsFileFilter(closureSuffix.value),
+    excludeFilter := HiddenFileFilter,
 
     closureGroupFiles := Seq.empty,
     closureExcludeOriginal := false,
-    closureExcludeGrouped := false,
-
-    closure := closureCompile.value
+    closureExcludeGrouped := false
   )
 
-  private def closureCompile: Def.Initialize[Task[Pipeline.Stage]] = Def.taskDyn {
+  override def projectSettings: Seq[Setting[_]] = {
+    inTask(closure)(
+      inConfig(Assets)(closureUnscopedSettings)
+    ) ++ Seq(
+      closure := closureCompile(closure, Assets).value
+    )
+  }
+
+  private def closureCompile(scoped: Scoped, configuration: Configuration): Def.Initialize[Task[Pipeline.Stage]] = Def.taskDyn {
 
     val taskStreams: TaskStreams = streams.value
 
     Def.task { mappings: Seq[PathMapping] =>
 
-      val include = (includeFilter in closure).value
-      val exclude = (excludeFilter in closure).value
+      val include = (includeFilter in (configuration, scoped)).value
+      val exclude = (excludeFilter in (configuration, scoped)).value
 
-      val targetDir = webTarget.value / closure.key.label
+      val targetDir = webTarget.value / scoped.key.label
       val compileMappings = mappings.view
         .filter(m => include.accept(m._1))
         .filterNot(m => exclude.accept(m._1))
         .toMap
 
-      val resolvedGroupFiles = closureGroupFiles.value.map { case (groupName, listOfFiles) =>
+      val resolvedGroupFiles = (closureGroupFiles in (configuration, scoped)).value.map { case (groupName, listOfFiles) =>
         val files = {
           listOfFiles.files.map { file =>
             mappings.find(_._2 == file).getOrElse {
               sys.error(s"Unable to find file: $file. Not found.")
             }
           } ++ {
-            listOfFiles.paths
-              .pair(Path.relativeTo((sourceDirectories in Assets).value ++ (webModuleDirectories in Assets).value) | Path.flat)
+            listOfFiles.paths.pair(Path.relativeTo(
+              (sourceDirectories in configuration).value ++
+                (webModuleDirectories in configuration).value
+            ) | Path.flat)
           }
         }
 
@@ -157,7 +165,7 @@ object SbtClosure extends AutoPlugin {
 
           val compiler = new Compiler
 
-          val options = closureCreateCompilerOptions.value(outputFileSubPath)
+          val options = (closureCreateCompilerOptions in (configuration, scoped)).value(outputFileSubPath)
 
           val result = compiler.compile(
             java.util.Collections.emptyList[SourceFile](),
@@ -188,7 +196,7 @@ object SbtClosure extends AutoPlugin {
         files.map { f =>
           val file = compileMappings(f)
 
-          val outputFileSubPath = IO.split(file)._1 + closureSuffix.value
+          val outputFileSubPath = IO.split(file)._1 + (closureSuffix in (configuration, scoped)).value
           val outputFile = targetDir / outputFileSubPath
 
           IO.createDirectory(outputFile.getParentFile)
@@ -196,7 +204,7 @@ object SbtClosure extends AutoPlugin {
 
           val compiler = new Compiler
 
-          val options = closureCreateCompilerOptions.value(file)
+          val options = (closureCreateCompilerOptions in (configuration, scoped)).value(file)
 
           val code = SourceFile.fromFile(f.getAbsolutePath)
           val result = compiler.compile(
@@ -216,7 +224,7 @@ object SbtClosure extends AutoPlugin {
         }
       }
 
-      val excludeGroupedFiles = if (closureExcludeGrouped.value) {
+      val excludeGroupedFiles = if ((closureExcludeGrouped in (configuration, scoped)).value) {
         resolvedGroupFiles.flatMap(_._2.keys).toSet
       } else Set.empty[File]
 
@@ -228,7 +236,7 @@ object SbtClosure extends AutoPlugin {
       }.toSeq
 
       compiled ++ compiledGroupFiles ++ {
-        if (closureExcludeOriginal.value) {
+        if ((closureExcludeOriginal in (configuration, scoped)).value) {
           mappings.diff(compileMappings.toSeq).diff(resolvedGroupFiles.flatMap(_._2))
         } else {
           mappings
